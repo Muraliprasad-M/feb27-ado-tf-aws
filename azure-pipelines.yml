@@ -70,15 +70,17 @@ stages:
     steps:
       - script: |
           python3 --version
-          python3 -m pip install --upgrade pip
-          python3 -m pip install "checkov>=3.0.0"
-          python3 -m checkov --version
+          python3 -m pip install --user --upgrade pip
+          python3 -m pip install --user "checkov>=3.0.0"
+          export PATH="$HOME/.local/bin:$PATH"
+          checkov --version
         displayName: "Install Checkov"
 
       # (A) Code scan (soft-fail)
       - script: |
           set -e
-          python3 -m checkov -d $(Build.SourcesDirectory) --config-file $(Build.SourcesDirectory)/.checkov.yaml --soft-fail
+          export PATH="$HOME/.local/bin:$PATH"
+          checkov -d $(Build.SourcesDirectory) --config-file $(Build.SourcesDirectory)/.checkov.yaml --soft-fail
         displayName: "Checkov on code (soft fail)"
 
       # (B) Create a TF plan and scan the JSON for enforced checks
@@ -104,8 +106,9 @@ stages:
 
       - script: |
           set -e
+          export PATH="$HOME/.local/bin:$PATH"
           cd envs/$(env_name)
-          python3 -m checkov -f tfplan.json --framework terraform_plan
+          checkov -f tfplan.json --framework terraform_plan
         displayName: "Checkov on Terraform plan (enforced)"
 
 # ---------------------------
