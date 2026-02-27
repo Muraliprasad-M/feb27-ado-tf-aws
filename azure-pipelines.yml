@@ -1,13 +1,12 @@
-# Azure DevOps -> AWS with OIDC: Terraform + Static Analysis bundle
+# Azure DevOps -> AWS with Access Keys: Terraform + Static Analysis bundle
 # Requirements:
 #   - Install "AWS Toolkit for Azure DevOps" extension in your org (AWSShellScript@1 task)
-#   - Create an AWS service connection of type "AWS" and check "Use OIDC"
-#   - Ensure the AWS IAM OIDC provider and role trust are configured
+#   - Create an AWS service connection of type "AWS" with Access Key/Secret Key
 #
 # This pipeline runs:
 #   1) TFLint (fail on issues)
 #   2) Checkov code scan (soft-fail) + Checkov plan scan (enforced)
-#   3) (Example) Terraform plan/apply stages using the same OIDC service connection
+#   3) (Example) Terraform plan/apply stages using the same AWS service connection
 #
 # Fill in/adjust variables below to match your repo layout and service connection names.
 
@@ -25,10 +24,8 @@ variables:
   tf_version: "1.6.6"
   aws_region: "eu-west-2"
   env_name:   "dev"
-  # Name of the AWS service connection (AWS Toolkit) with Use OIDC enabled
-  service_connection: "aws-ado-oidc-sc"
-  # Duration for OIDC STS credentials used by AWS Toolkit task (seconds: 900..43200)
-  aws.rolecredential.maxduration: "3600"
+  # Name of the AWS service connection (AWS Toolkit) with access key authentication
+  service_connection: "aws-ado-admin"
 
 # ---------------------------
 # Stage: Lint (TFLint)
@@ -95,7 +92,7 @@ stages:
         displayName: "Debug: Check environment"
 
       - task: AWSShellScript@1
-        displayName: "OIDC auth + terraform init/plan (create tfplan.json)"
+        displayName: "AWS auth + terraform init/plan (create tfplan.json)"
         inputs:
           awsCredentials: "$(service_connection)"
           regionName: "$(aws_region)"
@@ -132,7 +129,7 @@ stages:
         displayName: "Install Terraform"
 
       - task: AWSShellScript@1
-        displayName: "OIDC auth + terraform init/plan"
+        displayName: "AWS auth + terraform init/plan"
         inputs:
           awsCredentials: "$(service_connection)"
           regionName: "$(aws_region)"
@@ -165,7 +162,7 @@ stages:
       - download: current
         artifact: "tf-$(env_name)"
       - task: AWSShellScript@1
-        displayName: "OIDC auth + terraform apply"
+        displayName: "AWS auth + terraform apply"
         inputs:
           awsCredentials: "$(service_connection)"
           regionName: "$(aws_region)"
