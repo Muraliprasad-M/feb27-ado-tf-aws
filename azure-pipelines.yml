@@ -175,7 +175,7 @@ stages:
           # Check if tfplan.json exists
           if [ -f "envs/$(env_name)/tfplan.json" ]; then
             cd envs/$(env_name)
-            checkov -f tfplan.json --framework terraform_plan
+            checkov -f tfplan.json --framework terraform_plan --config-file $(Build.SourcesDirectory)/.checkov.yaml
           else
             echo "No tfplan.json found. Skipping Checkov plan scan."
           fi
