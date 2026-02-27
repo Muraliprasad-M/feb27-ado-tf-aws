@@ -1,0 +1,8 @@
+
+# Checkov configuration
+# Global defaults; CLI flags in pipeline can override soft-fail
+soft-fail: false
+framework:
+  - terraform
+  - terraform_plan
+download-external-modules: true

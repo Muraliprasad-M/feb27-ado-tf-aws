@@ -1,0 +1,204 @@
+# Azure DevOps -> AWS with Access Keys: Terraform + Static Analysis bundle
+# Requirements:
+#   - Install "AWS Toolkit for Azure DevOps" extension in your org (AWSShellScript@1 task)
+#   - Create an AWS service connection of type "AWS" with Access Key/Secret Key
+#
+# This pipeline runs:
+#   1) TFLint (fail on issues)
+#   2) Checkov code scan (soft-fail) + Checkov plan scan (enforced)
+#   3) (Example) Terraform plan/apply stages using the same AWS service connection
+#
+# Fill in/adjust variables below to match your repo layout and service connection names.
+
+trigger:
+  branches:
+    include: [ main ]
+pr:
+  branches:
+    include: [ main, feature/* ]
+
+name: "$(Date:yyyyMMdd)$(Rev:.r)"
+
+variables:
+  # Terraform and environment defaults
+  tf_version: "1.6.6"
+  aws_region: "eu-west-2"
+  env_name:   "dev"
+  # Name of the AWS service connection (AWS Toolkit) with access key authentication
+  service_connection: "aws-ado-admin"
+
+# ---------------------------
+# Stage: Lint (TFLint)
+# ---------------------------
+stages:
+- stage: lint
+  displayName: "Static Analysis: TFLint"
+  jobs:
+  - job: tflint
+    displayName: "TFLint on Terraform code"
+    pool: self-managed-ado-agent
+    steps:
+      - script: |
+          set -e
+          curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+          tflint --version
+        displayName: "Install TFLint"
+      - script: |
+          set -e
+          tflint --init
+        workingDirectory: $(Build.SourcesDirectory)
+        displayName: "TFLint --init (download plugins)"
+      - script: |
+          set -e
+          tflint --recursive --format=compact
+        workingDirectory: $(Build.SourcesDirectory)
+        displayName: "Run TFLint (fail on issues)"
+
+# ---------------------------
+# Stage: Security (Checkov)
+# ---------------------------
+- stage: security
+  displayName: "Static Analysis: Checkov"
+  dependsOn: lint
+  jobs:
+  - job: checkov
+    displayName: "Checkov: code + plan scan"
+    pool: self-managed-ado-agent
+    steps:
+      - script: |
+          python3 --version
+          python3 -m pip install --user --upgrade pip
+          python3 -m pip install --user "checkov>=3.0.0"
+          export PATH="$HOME/.local/bin:$PATH"
+          checkov --version
+        displayName: "Install Checkov"
+
+      # (A) Code scan (soft-fail)
+      - script: |
+          set -e
+          export PATH="$HOME/.local/bin:$PATH"
+          checkov -d $(Build.SourcesDirectory) --framework terraform --soft-fail
+        displayName: "Checkov on code (soft fail)"
+
+      # (B) Create a TF plan and scan the JSON for enforced checks
+      - task: ms-devlabs.custom-terraform-tasks.custom-terraform-installer-task.TerraformInstaller@1
+        inputs: { terraformVersion: "$(tf_version)" }
+        displayName: "Install Terraform"
+
+      - script: |
+          echo "Checking for residual AWS credentials..."
+          env | grep -i aws || echo "No AWS env vars found (good)"
+          date
+        displayName: "Debug: Check environment"
+
+      - task: AWSShellScript@1
+        displayName: "AWS auth + terraform init/plan (create tfplan.json)"
+        inputs:
+          awsCredentials: "$(service_connection)"
+          regionName: "$(aws_region)"
+          scriptType: inline
+          inlineScript: |
+            set -euo pipefail
+            
+            # Create envs/dev directory if it doesn't exist
+            mkdir -p envs/$(env_name)
+            cd envs/$(env_name)
+            
+            # Check if Terraform files exist
+            if [ ! -f "main.tf" ]; then
+              echo "No Terraform files found in envs/$(env_name). Skipping terraform steps."
+              echo "Please add your Terraform code to envs/$(env_name)/ directory."
+              exit 0
+            fi
+
+            terraform init               -backend-config="bucket=org-tfstate-eu-west-2"               -backend-config="key=envs/$(env_name)/terraform.tfstate"               -backend-config="region=$(aws_region)"               -backend-config="dynamodb_table=terraform-locks"               -backend-config="encrypt=true"
+
+            terraform validate
+            terraform plan -out=tfplan.binary
+            terraform show -json tfplan.binary | jq > tfplan.json
+
+      - script: |
+          set -e
+          export PATH="$HOME/.local/bin:$PATH"
+          
+          # Check if tfplan.json exists
+          if [ -f "envs/$(env_name)/tfplan.json" ]; then
+            cd envs/$(env_name)
+            checkov -f tfplan.json --framework terraform_plan
+          else
+            echo "No tfplan.json found. Skipping Checkov plan scan."
+          fi
+        displayName: "Checkov on Terraform plan (enforced)"
+
+# ---------------------------
+# Stage: Plan (example)
+# ---------------------------
+- stage: plan
+  displayName: "Terraform Plan"
+  dependsOn: security
+  jobs:
+  - job: plan
+    pool: self-managed-ado-agent
+    steps:
+      - task: ms-devlabs.custom-terraform-tasks.custom-terraform-installer-task.TerraformInstaller@1
+        inputs: { terraformVersion: "$(tf_version)" }
+        displayName: "Install Terraform"
+
+      - task: AWSShellScript@1
+        displayName: "AWS auth + terraform init/plan"
+        inputs:
+          awsCredentials: "$(service_connection)"
+          regionName: "$(aws_region)"
+          scriptType: inline
+          inlineScript: |
+            set -euo pipefail
+            
+            # Check if envs/dev directory exists
+            if [ ! -d "envs/$(env_name)" ] || [ ! -f "envs/$(env_name)/main.tf" ]; then
+              echo "No Terraform code found in envs/$(env_name). Skipping plan stage."
+              exit 0
+            fi
+            
+            cd envs/$(env_name)
+            terraform init               -backend-config="bucket=org-tfstate-eu-west-2"               -backend-config="key=envs/$(env_name)/terraform.tfstate"               -backend-config="region=$(aws_region)"               -backend-config="dynamodb_table=terraform-locks"               -backend-config="encrypt=true"
+            terraform plan -out=tfplan
+            mkdir -p $(Build.ArtifactStagingDirectory)
+            terraform show -no-color tfplan > $(Build.ArtifactStagingDirectory)/plan.txt
+            cp tfplan $(Build.ArtifactStagingDirectory)/tfplan
+      - publish: "$(Build.ArtifactStagingDirectory)"
+        artifact: "tf-$(env_name)"
+
+# ---------------------------
+# Stage: Apply (example; gated on main)
+# ---------------------------
+- stage: apply
+  displayName: "Terraform Apply"
+  dependsOn: plan
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  jobs:
+  - job: apply
+    pool: self-managed-ado-agent
+    steps:
+      - task: ms-devlabs.custom-terraform-tasks.custom-terraform-installer-task.TerraformInstaller@1
+        inputs: { terraformVersion: "$(tf_version)" }
+        displayName: "Install Terraform"
+      - download: current
+        artifact: "tf-$(env_name)"
+      - task: AWSShellScript@1
+        displayName: "AWS auth + terraform apply"
+        inputs:
+          awsCredentials: "$(service_connection)"
+          regionName: "$(aws_region)"
+          scriptType: inline
+          inlineScript: |
+            set -euo pipefail
+            
+            # Check if envs/dev directory exists
+            if [ ! -d "envs/$(env_name)" ]; then
+              echo "No Terraform code found. Skipping apply stage."
+              exit 0
+            fi
+            
+            cd envs/$(env_name)
+            terraform init               -backend-config="bucket=org-tfstate-eu-west-2"               -backend-config="key=envs/$(env_name)/terraform.tfstate"               -backend-config="region=$(aws_region)"               -backend-config="dynamodb_table=terraform-locks"               -backend-config="encrypt=true"
+            terraform apply -auto-approve $(Pipeline.Workspace)/tf-$(env_name)/tfplan
