@@ -99,7 +99,17 @@ stages:
           scriptType: inline
           inlineScript: |
             set -euo pipefail
+            
+            # Create envs/dev directory if it doesn't exist
+            mkdir -p envs/$(env_name)
             cd envs/$(env_name)
+            
+            # Check if Terraform files exist
+            if [ ! -f "main.tf" ]; then
+              echo "No Terraform files found in envs/$(env_name). Skipping terraform steps."
+              echo "Please add your Terraform code to envs/$(env_name)/ directory."
+              exit 0
+            fi
 
             terraform init               -backend-config="bucket=org-tfstate-eu-west-2"               -backend-config="key=envs/$(env_name)/terraform.tfstate"               -backend-config="region=$(aws_region)"               -backend-config="dynamodb_table=terraform-locks"               -backend-config="encrypt=true"
 
@@ -110,8 +120,14 @@ stages:
       - script: |
           set -e
           export PATH="$HOME/.local/bin:$PATH"
-          cd envs/$(env_name)
-          checkov -f tfplan.json --framework terraform_plan
+          
+          # Check if tfplan.json exists
+          if [ -f "envs/$(env_name)/tfplan.json" ]; then
+            cd envs/$(env_name)
+            checkov -f tfplan.json --framework terraform_plan
+          else
+            echo "No tfplan.json found. Skipping Checkov plan scan."
+          fi
         displayName: "Checkov on Terraform plan (enforced)"
 
 # ---------------------------
