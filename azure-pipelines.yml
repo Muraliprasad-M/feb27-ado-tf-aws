@@ -145,6 +145,12 @@ stages:
           inlineScript: |
             set -euo pipefail
             
+            # Install jq if not present
+            if ! command -v jq &> /dev/null; then
+              echo "Installing jq..."
+              sudo apt-get update -qq && sudo apt-get install -y jq
+            fi
+            
             # Create envs/dev directory if it doesn't exist
             mkdir -p envs/$(env_name)
             cd envs/$(env_name)
@@ -160,7 +166,7 @@ stages:
 
             terraform validate
             terraform plan -out=tfplan.binary
-            terraform show -json tfplan.binary | jq > tfplan.json
+            terraform show -json tfplan.binary > tfplan.json
 
       - script: |
           set -e
