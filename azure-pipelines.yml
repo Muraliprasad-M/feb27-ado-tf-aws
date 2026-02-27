@@ -88,6 +88,12 @@ stages:
         inputs: { terraformVersion: "$(tf_version)" }
         displayName: "Install Terraform"
 
+      - script: |
+          echo "Checking for residual AWS credentials..."
+          env | grep -i aws || echo "No AWS env vars found (good)"
+          date
+        displayName: "Debug: Check environment"
+
       - task: AWSShellScript@1
         displayName: "OIDC auth + terraform init/plan (create tfplan.json)"
         inputs:
