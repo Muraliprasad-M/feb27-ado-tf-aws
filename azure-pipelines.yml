@@ -152,13 +152,6 @@ stages:
           scriptType: inline
           inlineScript: |
             set -euo pipefail
-            
-            # Check if envs/dev directory exists
-            if [ ! -d "envs/$(env_name)" ] || [ ! -f "envs/$(env_name)/main.tf" ]; then
-              echo "No Terraform code found in envs/$(env_name). Skipping plan stage."
-              exit 0
-            fi
-            
             cd envs/$(env_name)
             terraform init               -backend-config="bucket=org-tfstate-eu-west-2"               -backend-config="key=envs/$(env_name)/terraform.tfstate"               -backend-config="region=$(aws_region)"               -backend-config="dynamodb_table=terraform-locks"               -backend-config="encrypt=true"
             terraform plan -out=tfplan
@@ -192,13 +185,6 @@ stages:
           scriptType: inline
           inlineScript: |
             set -euo pipefail
-            
-            # Check if envs/dev directory exists
-            if [ ! -d "envs/$(env_name)" ]; then
-              echo "No Terraform code found. Skipping apply stage."
-              exit 0
-            fi
-            
             cd envs/$(env_name)
             terraform init               -backend-config="bucket=org-tfstate-eu-west-2"               -backend-config="key=envs/$(env_name)/terraform.tfstate"               -backend-config="region=$(aws_region)"               -backend-config="dynamodb_table=terraform-locks"               -backend-config="encrypt=true"
             terraform apply -auto-approve $(Pipeline.Workspace)/tf-$(env_name)/tfplan
