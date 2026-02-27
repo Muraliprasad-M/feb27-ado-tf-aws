@@ -84,7 +84,7 @@ stages:
         displayName: "Checkov on code (soft fail)"
 
       # (B) Create a TF plan and scan the JSON for enforced checks
-      - task: TerraformInstaller@1
+      - task: ms-devlabs.custom-terraform-tasks.custom-terraform-installer-task.TerraformInstaller@1
         inputs: { terraformVersion: "$(tf_version)" }
         displayName: "Install Terraform"
 
@@ -120,7 +120,7 @@ stages:
   - job: plan
     pool: self-managed-ado-agent
     steps:
-      - task: TerraformInstaller@1
+      - task: ms-devlabs.custom-terraform-tasks.custom-terraform-installer-task.TerraformInstaller@1
         inputs: { terraformVersion: "$(tf_version)" }
         displayName: "Install Terraform"
 
@@ -152,7 +152,7 @@ stages:
   - job: apply
     pool: self-managed-ado-agent
     steps:
-      - task: TerraformInstaller@1
+      - task: ms-devlabs.custom-terraform-tasks.custom-terraform-installer-task.TerraformInstaller@1
         inputs: { terraformVersion: "$(tf_version)" }
         displayName: "Install Terraform"
       - download: current
