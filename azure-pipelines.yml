@@ -1,4 +1,3 @@
-
 # Azure DevOps -> AWS with OIDC: Terraform + Static Analysis bundle
 # Requirements:
 #   - Install "AWS Toolkit for Azure DevOps" extension in your org (AWSShellScript@1 task)
@@ -34,6 +33,7 @@ variables:
 # ---------------------------
 # Stage: Lint (TFLint)
 # ---------------------------
+stages:
 - stage: lint
   displayName: "Static Analysis: TFLint"
   jobs:
