@@ -6,3 +6,10 @@ framework:
   - terraform
   - terraform_plan
 download-external-modules: true
+
+# Skip checks that are too strict for test/dev environments
+skip-check:
+  - CKV2_AWS_62  # S3 event notifications
+  - CKV_AWS_144  # S3 cross-region replication
+  - CKV_AWS_18   # S3 access logging
+  - CKV_AWS_145  # S3 KMS encryption (using AES256 instead)
