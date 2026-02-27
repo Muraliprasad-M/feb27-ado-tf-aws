@@ -80,7 +80,7 @@ stages:
       - script: |
           set -e
           export PATH="$HOME/.local/bin:$PATH"
-          checkov -d $(Build.SourcesDirectory) --config-file $(Build.SourcesDirectory)/.checkov.yaml --soft-fail
+          checkov -d $(Build.SourcesDirectory) --framework terraform --soft-fail
         displayName: "Checkov on code (soft fail)"
 
       # (B) Create a TF plan and scan the JSON for enforced checks
