@@ -68,12 +68,10 @@ stages:
     displayName: "Checkov: code + plan scan"
     pool: self-managed-ado-agent
     steps:
-      - task: UsePythonVersion@0
-        inputs: { versionSpec: '3.x' }
-        displayName: "Use Python 3"
       - script: |
-          python -m pip install --upgrade pip
-          pip install "checkov>=3.0.0"
+          python3 --version
+          python3 -m pip install --upgrade pip
+          python3 -m pip install "checkov>=3.0.0"
           checkov --version
         displayName: "Install Checkov"
 
